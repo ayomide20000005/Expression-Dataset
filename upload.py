@@ -16,19 +16,6 @@ def upload_dataset(filepath="dataset.jsonl"):
             break
         time.sleep(2)
     
-    print("Running adaptation...")
-    job = client.datasets.run(
-        upload.dataset_id,
-        column_mapping={"prompt": "input"},
-        job_specification={"max_rows": 1000},
-    )
-    
-    print(f"Launched! Estimated time: ~{job.estimated_minutes} mins")
-    client.datasets.wait_for_completion(upload.dataset_id, timeout=3600)
-    
-    dataset = client.datasets.get(upload.dataset_id)
-    if dataset.evaluation_summary:
-        print(f"Quality: {dataset.evaluation_summary.grade_before} → {dataset.evaluation_summary.grade_after}")
-    
-    url = client.datasets.download(upload.dataset_id)
-    print(f"Download your dataset here: {url}")
+    print(f"✅ Dataset uploaded successfully!")
+    print(f"Dataset ID: {upload.dataset_id}")
+    print("Now go to the Adaption platform to run the adaptation!")
