@@ -3,6 +3,8 @@ import xml.etree.ElementTree as ET
 import json
 import os
 import time
+import fitz  # pymupdf
+import io
 
 ARXIV_IDS = [
     # Topic 1 — Human Memory & AI Memory
@@ -61,7 +63,7 @@ ARXIV_IDS = [
     ("2502.14437", "Expression & Interpretability"),
 ]
 
-def fetch_single(arxiv_id, retries=3):
+def fetch_metadata(arxiv_id, retries=3):
     base_url = "https://export.arxiv.org/api/query?id_list="
     for attempt in range(retries):
         try:
@@ -76,15 +78,38 @@ def fetch_single(arxiv_id, retries=3):
             time.sleep(3)
     return None
 
+def fetch_full_text(arxiv_id, retries=3):
+    pdf_url = f"https://arxiv.org/pdf/{arxiv_id}"
+    for attempt in range(retries):
+        try:
+            response = requests.get(pdf_url, timeout=60)
+            if response.status_code == 200:
+                pdf_bytes = io.BytesIO(response.content)
+                doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+                full_text = ""
+                for page in doc:
+                    full_text += page.get_text()
+                doc.close()
+                # Clean up text
+                full_text = " ".join(full_text.split())
+                return full_text
+            else:
+                print(f"  ↻ PDF retry {attempt+1} for {arxiv_id}...")
+                time.sleep(3)
+        except Exception as e:
+            print(f"  ↻ PDF error {attempt+1} for {arxiv_id}: {e}")
+            time.sleep(3)
+    return None
+
 def fetch_papers():
     papers = []
     print("Fetching papers from Arxiv...")
 
     for arxiv_id, topic in ARXIV_IDS:
-        response = fetch_single(arxiv_id)
-
+        # Fetch metadata
+        response = fetch_metadata(arxiv_id)
         if response is None:
-            print(f"✗ Completely failed: {arxiv_id}")
+            print(f"✗ Metadata failed: {arxiv_id}")
             continue
 
         try:
@@ -92,25 +117,37 @@ def fetch_papers():
             namespace = {"atom": "http://www.w3.org/2005/Atom"}
             entry = root.find("atom:entry", namespace)
 
-            if entry is not None:
-                title = entry.find("atom:title", namespace).text.strip()
-                summary = entry.find("atom:summary", namespace).text.strip()
-
-                paper = {
-                    "arxiv_id": arxiv_id,
-                    "title": title,
-                    "summary": summary,
-                    "topic": topic
-                }
-
-                raw_path = os.path.join("raw", f"{arxiv_id}.json")
-                with open(raw_path, "w") as f:
-                    json.dump(paper, f)
-
-                papers.append(paper)
-                print(f"✓ [{topic}] {title[:60]}...")
-            else:
+            if entry is None:
                 print(f"✗ No entry found for {arxiv_id}")
+                continue
+
+            title = entry.find("atom:title", namespace).text.strip()
+            summary = entry.find("atom:summary", namespace).text.strip()
+
+            # Fetch full PDF text
+            print(f"  → Downloading PDF for {arxiv_id}...")
+            full_text = fetch_full_text(arxiv_id)
+
+            if full_text:
+                content = full_text
+                print(f"✓ [{topic}] {title[:55]}... ({len(full_text.split())} words)")
+            else:
+                content = summary
+                print(f"⚠ [{topic}] {title[:55]}... (abstract only, PDF failed)")
+
+            paper = {
+                "arxiv_id": arxiv_id,
+                "title": title,
+                "summary": summary,
+                "full_text": content,
+                "topic": topic
+            }
+
+            raw_path = os.path.join("raw", f"{arxiv_id}.json")
+            with open(raw_path, "w", encoding="utf-8") as f:
+                json.dump(paper, f)
+
+            papers.append(paper)
 
         except Exception as e:
             print(f"✗ Parse error for {arxiv_id}: {e}")

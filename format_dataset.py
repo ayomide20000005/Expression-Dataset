@@ -316,9 +316,9 @@ def format_dataset(papers):
         title = paper["title"]
         arxiv_id = paper["arxiv_id"]
         topic = paper["topic"]
-        summary = paper["summary"]
+        content = paper.get("full_text", paper.get("summary", ""))
 
-        chunks = split_into_chunks(summary, chunk_size=150)
+        chunks = split_into_chunks(content, chunk_size=150)
 
         for i, chunk in enumerate(chunks):
             if len(chunk.strip()) < 50:
