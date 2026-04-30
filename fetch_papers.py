@@ -2,6 +2,7 @@ import requests
 import xml.etree.ElementTree as ET
 import json
 import os
+import time
 
 ARXIV_IDS = [
     # Topic 1 — Human Memory & AI Memory
@@ -70,9 +71,13 @@ def fetch_papers():
     for arxiv_id, topic in ARXIV_IDS:
         try:
             url = base_url + arxiv_id
-            response = requests.get(url)
-            root = ET.fromstring(response.content)
+            response = requests.get(url, timeout=10)
 
+            if "<?xml" not in response.text and "<feed" not in response.text:
+                print(f"✗ Invalid response for {arxiv_id}, skipping...")
+                continue
+
+            root = ET.fromstring(response.content)
             namespace = {"atom": "http://www.w3.org/2005/Atom"}
             entry = root.find("atom:entry", namespace)
 
@@ -87,13 +92,16 @@ def fetch_papers():
                     "topic": topic
                 }
 
-                # Save raw paper
                 raw_path = os.path.join("raw", f"{arxiv_id}.json")
                 with open(raw_path, "w") as f:
                     json.dump(paper, f)
 
                 papers.append(paper)
                 print(f"✓ [{topic}] {title[:60]}...")
+            else:
+                print(f"✗ No entry found for {arxiv_id}")
+
+            time.sleep(0.5)
 
         except Exception as e:
             print(f"✗ Failed to fetch {arxiv_id}: {e}")
