@@ -37,7 +37,6 @@ ARXIV_IDS = [
     ("2408.09176", "Reasoning Traces"),
     ("2505.05410", "Reasoning Traces"),
     ("2411.15114", "Reasoning Traces"),
-    ("2602.14903", "Reasoning Traces"),
 
     # Topic 3 — Expression, Black Box & Interpretability
     ("2511.19265", "Expression & Interpretability"),
@@ -62,21 +61,33 @@ ARXIV_IDS = [
     ("2502.14437", "Expression & Interpretability"),
 ]
 
+def fetch_single(arxiv_id, retries=3):
+    base_url = "https://export.arxiv.org/api/query?id_list="
+    for attempt in range(retries):
+        try:
+            response = requests.get(base_url + arxiv_id, timeout=15)
+            if "<entry>" in response.text:
+                return response
+            else:
+                print(f"  ↻ Retry {attempt+1} for {arxiv_id}...")
+                time.sleep(3)
+        except Exception as e:
+            print(f"  ↻ Retry {attempt+1} for {arxiv_id}: {e}")
+            time.sleep(3)
+    return None
+
 def fetch_papers():
     papers = []
-    base_url = "https://export.arxiv.org/api/query?id_list="
-
     print("Fetching papers from Arxiv...")
 
     for arxiv_id, topic in ARXIV_IDS:
+        response = fetch_single(arxiv_id)
+
+        if response is None:
+            print(f"✗ Completely failed: {arxiv_id}")
+            continue
+
         try:
-            url = base_url + arxiv_id
-            response = requests.get(url, timeout=10)
-
-            if "<?xml" not in response.text and "<feed" not in response.text:
-                print(f"✗ Invalid response for {arxiv_id}, skipping...")
-                continue
-
             root = ET.fromstring(response.content)
             namespace = {"atom": "http://www.w3.org/2005/Atom"}
             entry = root.find("atom:entry", namespace)
@@ -101,10 +112,10 @@ def fetch_papers():
             else:
                 print(f"✗ No entry found for {arxiv_id}")
 
-            time.sleep(0.5)
-
         except Exception as e:
-            print(f"✗ Failed to fetch {arxiv_id}: {e}")
+            print(f"✗ Parse error for {arxiv_id}: {e}")
+
+        time.sleep(3)
 
     print(f"\nTotal papers fetched: {len(papers)}")
     return papers
